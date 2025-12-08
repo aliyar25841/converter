@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="fr" class="transition-colors duration-300">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Tools - Convert & Resize</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        // Light mode
+                        background: '#FAFAFA',
+                        surface: '#FFFFFF',
+                        primary: '#101010',
+                        secondary: '#666666',
+                        border: '#E5E5E5',
+                        brand: '#6366f1', // Indigo for accents
+
+                        // Dark mode
+                        'dark-background': '#101010',
+                        'dark-surface': '#1A1A1A',
+                        'dark-border': '#333333',
+                        'dark-text': '#F3F4F6',
+                        'dark-secondary': '#9CA3AF',
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+
+<body
+    class="bg-background dark:bg-dark-background text-primary dark:text-dark-text font-sans antialiased h-screen overflow-hidden transition-colors duration-300 flex flex-col">
+
+    <!-- Navbar -->
+    <nav
+        class="w-full border-b border-border dark:border-dark-border bg-surface dark:bg-dark-surface px-6 py-4 flex items-center justify-between shrink-0 z-50">
+        <div class="flex items-center gap-6">
+            <h1 class="text-lg font-bold tracking-tight">ImageTools</h1>
+
+            <!-- Mode Switcher -->
+            <div class="hidden md:flex bg-gray-100 dark:bg-dark-border p-1 rounded-lg">
+                <button id="nav-converter"
+                    class="px-4 py-1.5 text-sm font-medium rounded-md transition-all bg-white dark:bg-dark-surface text-brand shadow-sm"
+                    onclick="switchMode('converter')">
+                    Convertisseur
+                </button>
+                <button id="nav-resizer"
+                    class="px-4 py-1.5 text-sm font-medium rounded-md transition-all text-secondary dark:text-dark-secondary hover:text-primary dark:hover:text-white"
+                    onclick="switchMode('resizer')">
+                    Redimensionneur
+                </button>
+                <button id="nav-editor"
+                    class="px-4 py-1.5 text-sm font-medium rounded-md transition-all text-secondary dark:text-dark-secondary hover:text-primary dark:hover:text-white"
+                    onclick="switchMode('editor')">
+                    Éditeur
+                </button>
+            </div>
+        </div>
+
+        <button id="theme-toggle"
+            class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-secondary dark:text-dark-secondary">
+            <svg id="sun-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                stroke="currentColor" class="w-5 h-5 hidden dark:block">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                    d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" />
+            </svg>
+            <svg id="moon-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                stroke="currentColor" class="w-5 h-5 block dark:hidden">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                    d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z" />
+            </svg>
+        </button>
+    </nav>
+
+    <!-- Mobile Tabs -->
+    <div class="md:hidden flex p-4 pb-0 gap-2 shrink-0">
+        <button id="mob-nav-converter" class="flex-1 py-2 text-sm font-medium border-b-2 border-brand text-brand"
+            onclick="switchMode('converter')">Convertisseur</button>
+        <button id="mob-nav-resizer"
+            class="flex-1 py-2 text-sm font-medium border-b-2 border-transparent text-secondary"
+            onclick="switchMode('resizer')">Redimensionneur</button>
+        <button id="mob-nav-editor" class="flex-1 py-2 text-sm font-medium border-b-2 border-transparent text-secondary"
+            onclick="switchMode('editor')">Éditeur</button>
+    </div>
+
+    <main class="flex-1 w-full max-w-[1600px] mx-auto p-4 md:p-6 lg:p-8 min-h-0 overflow-hidden">
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full">
+
+            <!-- LEFT COLUMN: Content (2/3) -->
+            <div class="lg:col-span-2 flex flex-col gap-6 h-full overflow-hidden">
+                <!-- ... Upload/Preview ... -->
+                <!-- Skipped unchanged part of left column -->
+                <div id="upload-screen"
+                    class="h-full flex items-center justify-center border-2 border-dashed border-border dark:border-dark-border rounded-2xl bg-surface dark:bg-dark-surface hover:border-brand/50 transition-all cursor-pointer relative group">
+                    <input type="file" id="file-input" accept="image/*" multiple
+                        class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
+                    <div class="text-center space-y-4 p-8 pointer-events-none">
+                        <div
+                            class="w-16 h-16 bg-brand/10 text-brand rounded-2xl flex items-center justify-center mx-auto group-hover:scale-110 transition-transform duration-300">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                                stroke="currentColor" class="w-8 h-8">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 class="text-xl font-semibold">Importer des images</h3>
+                            <p class="text-secondary dark:text-dark-secondary mt-1">Glissez plusieurs fichiers ici</p>
+                        </div>
+                        <button
+                            class="px-4 py-2 bg-gray-100 dark:bg-dark-border text-sm font-medium rounded-lg group-hover:bg-gray-200 dark:group-hover:bg-[#404040] transition-colors">
+                            Parcourir les fichiers
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Preview Area (List/Grid) -->
+                <div id="preview-screen" class="hidden flex flex-col gap-4 h-full">
+
+                    <div
+                        class="flex justify-between items-center bg-gray-50 dark:bg-dark-surface p-3 rounded-lg border border-border dark:border-dark-border shrink-0">
+                        <h2 class="font-semibold text-lg flex items-center gap-2">
+                            Fichiers <span id="file-count"
+                                class="bg-gray-200 dark:bg-dark-border px-2 py-0.5 rounded-full text-xs">0</span>
+                        </h2>
+                        <div class="flex gap-2">
+                            <button id="add-more-btn"
+                                class="flex items-center gap-1 text-xs font-medium bg-white dark:bg-dark-border border border-border dark:border-[#404040] hover:bg-gray-100 dark:hover:bg-[#333] px-3 py-1.5 rounded-lg transition-colors">
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M12 4v16m8-8H4"></path>
+                                </svg>
+                                Ajouter
+                            </button>
+                            <button id="clear-all" class="text-xs text-red-500 hover:text-red-600 font-medium px-2">Tout
+                                effacer</button>
+                        </div>
+                    </div>
+
+                    <!-- File List -->
+                    <div id="file-list" class="space-y-3 overflow-y-auto pr-2 flex-1 min-h-0">
+                        <!-- JS GENERATED ITEMS -->
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- RIGHT COLUMN: Settings (1/3) -->
+            <aside
+                class="bg-surface dark:bg-dark-surface border border-border dark:border-dark-border rounded-2xl shadow-sm flex flex-col h-fit sticky top-24">
+
+                <div class="p-5 border-b border-border dark:border-dark-border">
+                    <h2 class="font-semibold" id="settings-title">Paramètres de conversion</h2>
+                </div>
+
+                <div id="controls-panel"
+                    class="p-5 space-y-6 opacity-50 pointer-events-none data-[active=true]:opacity-100 data-[active=true]:pointer-events-auto transition-opacity duration-200">
+
+                    <!-- EDITOR TOOLS (Hidden in other modes) -->
+                    <div id="editor-tools" class="hidden space-y-6">
+
+                        <!-- Transform -->
+                        <div class="space-y-3">
+                            <h3
+                                class="text-xs font-bold uppercase tracking-wider text-secondary dark:text-dark-secondary">
+                                Transformation</h3>
+                            <div class="grid grid-cols-2 gap-2">
+                                <button onclick="rotate(-90)"
+                                    class="p-2 bg-gray-50 dark:bg-dark-background border border-border dark:border-dark-border rounded-lg hover:bg-brand/10 hover:text-brand hover:border-brand/50 transition-colors"
+                                    title="Rotation -90°">
+                                    <svg class="w-5 h-5 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"></path>
+                                    </svg>
+                                </button>
+                                <button onclick="rotate(90)"
+                                    class="p-2 bg-gray-50 dark:bg-dark-background border border-border dark:border-dark-border rounded-lg hover:bg-brand/10 hover:text-brand hover:border-brand/50 transition-colors"
+                                    title="Rotation +90°">
+                                    <svg class="w-5 h-5 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M21 10h-10a8 8 0 00-8 8v2M21 10l-6 6m6-6l-6-6"></path>
+                                    </svg>
+                                </button>
+                                <button onclick="flip('h')"
+                                    class="p-2 bg-gray-50 dark:bg-dark-background border border-border dark:border-dark-border rounded-lg hover:bg-brand/10 hover:text-brand hover:border-brand/50 transition-colors"
+                                    title="Miroir Horizontal">
+                                    <svg class="w-5 h-5 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path>
+                                    </svg>
+                                </button>
+                                <button onclick="flip('v')"
+                                    class="p-2 bg-gray-50 dark:bg-dark-background border border-border dark:border-dark-border rounded-lg hover:bg-brand/10 hover:text-brand hover:border-brand/50 transition-colors"
+                                    title="Miroir Vertical">
+                                    <svg class="w-5 h-5 mx-auto rotate-90" fill="none" stroke="currentColor"
+                                        viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Crop -->
+                        <div class="space-y-3">
+                            <h3
+                                class="text-xs font-bold uppercase tracking-wider text-secondary dark:text-dark-secondary">
+                                Recadrage</h3>
+                            <div class="space-y-2">
+                                <label class="text-xs font-medium">Mode</label>
+                                <select id="crop-select"
+                                    class="w-full bg-gray-50 dark:bg-dark-background border border-border dark:border-dark-border rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-brand outline-none">
+                                    <option value="none">Aucun (Original)</option>
+                                    <option value="free">Libre (Bientôt)</option>
+                                    <option value="square">Carré (1:1)</option>
+                                    <option value="4:5">Portrait (4:5)</option>
+                                    <option value="16:9">Paysage (16:9)</option>
+                                    <option value="9:16">Story (9:16)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- RESIZER TOOLS (Hidden in Converter Mode) -->
+                    <div id="resizer-tools" class="hidden space-y-4">
+                        <div class="space-y-2">
+                            <div class="flex justify-between text-xs">
+                                <span>Échelle</span>
+                                <span id="scale-value"
+                                    class="font-mono bg-brand text-white px-1.5 py-0.5 rounded text-[10px]">100%</span>
+                            </div>
+                            <input type="range" id="scale-input" min="5" max="100" step="5" value="100"
+                                class="w-full h-1.5 bg-gray-200 dark:bg-dark-border rounded-lg appearance-none cursor-pointer accent-brand">
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-3">
+                            <div class="relative">
+                                <label
+                                    class="text-[10px] text-secondary dark:text-dark-secondary absolute -top-2 left-2 bg-surface dark:bg-dark-surface px-1">Largeur</label>
+                                <input type="number" id="width-input" placeholder="Auto"
+                                    class="w-full bg-gray-50 dark:bg-dark-background border border-border dark:border-dark-border rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-brand focus:border-brand outline-none transition-shadow text-center font-mono">
+                                <span
+                                    class="absolute right-3 top-2 text-xs text-secondary dark:text-dark-secondary pointer-events-none">px</span>
+                            </div>
+                            <div class="relative">
+                                <label
+                                    class="text-[10px] text-secondary dark:text-dark-secondary absolute -top-2 left-2 bg-surface dark:bg-dark-surface px-1">Hauteur</label>
+                                <input type="number" id="height-input" placeholder="Auto"
+                                    class="w-full bg-gray-50 dark:bg-dark-background border border-border dark:border-dark-border rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-brand focus:border-brand outline-none transition-shadow text-center font-mono">
+                                <span
+                                    class="absolute right-3 top-2 text-xs text-secondary dark:text-dark-secondary pointer-events-none">px</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- CONVERTER TOOLS (Always visible but main focus in Converter Mode) -->
+                    <div id="converter-tools" class="space-y-4">
+                        <label
+                            class="text-sm font-medium flex items-center gap-2 text-secondary dark:text-dark-secondary">
+                            Format de sortie
+                        </label>
+                        <select id="format-select"
+                            class="w-full bg-gray-50 dark:bg-dark-background border border-border dark:border-dark-border rounded-lg px-3 py-2.5 text-sm focus:ring-1 focus:ring-brand focus:border-brand outline-none transition-shadow">
+                            <option value="image/jpeg">JPG (JPEG)</option>
+                            <option value="image/png">PNG</option>
+                            <option value="image/webp">WebP</option>
+                            <option value="image/avif">AVIF</option>
+                        </select>
+
+                        <div id="quality-wrapper" class="space-y-2">
+                            <div class="flex justify-between text-xs">
+                                <span>Qualité</span>
+                                <span id="quality-val" class="font-mono">80%</span>
+                            </div>
+                            <input type="range" id="quality-input" min="1" max="100" value="80"
+                                class="w-full h-1.5 bg-gray-200 dark:bg-dark-border rounded-lg appearance-none cursor-pointer accent-brand">
+                        </div>
+                    </div>
+
+                    <div class="pt-2">
+                        <button id="process-btn" disabled
+                            class="w-full bg-brand text-white font-medium py-3 rounded-xl hover:bg-brand/90 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-brand/20 flex items-center justify-center gap-2">
+                            <svg id="btn-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m3.75 9v6m3-3H9m1.5-12H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z">
+                                </path>
+                            </svg>
+                            <span id="process-btn-text">Convertir tout</span>
+                        </button>
+                    </div>
+
+                </div>
+
+            </aside>
+
+
+        </div>
+
+    </main>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
