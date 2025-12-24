@@ -224,7 +224,13 @@ async function handleFiles(files) {
   const globalFormat = formatSelect.value;
 
   for (const file of files) {
-    if (!file.type.startsWith("image/")) continue;
+    // Relaxed check to allow HEIC (which might have empty type or different type)
+    const isHeic = file.name.toLowerCase().endsWith(".heic") ||
+      file.name.toLowerCase().endsWith(".heif") ||
+      file.type === "image/heic" ||
+      file.type === "image/heif";
+
+    if (!file.type.startsWith("image/") && !isHeic) continue;
 
     const id = Math.random().toString(36).substr(2, 9);
     const item = {
@@ -237,10 +243,24 @@ async function handleFiles(files) {
     };
 
     try {
-      item.bitmap = await createImageBitmap(file);
+      let sourceBlob = file;
+
+      if (isHeic) {
+        // Normalize HEIC to JPEG blob immediately so browsers can read it
+        console.log("Converting HEIC...", file.name);
+        const converted = await heic2any({
+          blob: file,
+          toType: "image/jpeg",
+          quality: 0.9
+        });
+        sourceBlob = Array.isArray(converted) ? converted[0] : converted;
+      }
+
+      item.sourceBlob = sourceBlob; // Store for preview
+      item.bitmap = await createImageBitmap(sourceBlob);
       fileQueue.push(item);
     } catch (e) {
-      console.error("Skipped bad file", file.name);
+      console.error("Skipped bad file or HEIC conversion failed", file.name, e);
     }
   }
 
@@ -257,7 +277,10 @@ async function handleFiles(files) {
   }
 }
 
-function getPrettyFormat(mime) {
+function getPrettyFormat(mime, filename) {
+  if (filename && (filename.toLowerCase().endsWith(".heic") || filename.toLowerCase().endsWith(".heif"))) {
+    return "HEIC";
+  }
   if (!mime) return "???";
   const sub = mime.split("/")[1].toUpperCase();
   if (sub === "JPEG") return "JPG";
@@ -273,7 +296,8 @@ function renderList() {
     row.className =
       "bg-white dark:bg-dark-surface border border-border dark:border-dark-border rounded-xl overflow-hidden shadow-sm mb-4";
 
-    const originalUrl = URL.createObjectURL(item.file);
+    // Use converted sourceBlob for preview if available (fixes HEIC preview)
+    const originalUrl = URL.createObjectURL(item.sourceBlob || item.file);
 
     const isDone = item.status === "done";
     const isProcessingItem = item.status === "processing";
@@ -296,27 +320,24 @@ function renderList() {
         )}%</span>`;
     }
 
-    const inputFormat = getPrettyFormat(item.file.type);
+    const inputFormat = getPrettyFormat(item.file.type, item.file.name);
 
     row.innerHTML = `
             <div class="px-4 py-2 bg-gray-50 dark:bg-[#202020] border-b border-border dark:border-dark-border flex justify-between items-center">
-                <span class="text-xs font-medium truncate max-w-[200px] text-secondary dark:text-dark-secondary" title="${
-                  item.file.name
-                }">${item.file.name}</span>
+                <span class="text-xs font-medium truncate max-w-[200px] text-secondary dark:text-dark-secondary" title="${item.file.name
+      }">${item.file.name}</span>
                 <div class="flex items-center gap-2">
-                     ${
-                       isDone
-                         ? `<button onclick="downloadSingle('${item.id}')" class="text-xs bg-brand text-white px-2 py-1 rounded hover:bg-brand/90 transition-colors">Télécharger</button>`
-                         : ""
-                     }
-                    <button onclick="removeFile('${
-                      item.id
-                    }')" class="text-gray-400 hover:text-red-500"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+                     ${isDone
+        ? `<button onclick="downloadSingle('${item.id}')" class="text-xs bg-brand text-white px-2 py-1 rounded hover:bg-brand/90 transition-colors">Télécharger</button>`
+        : ""
+      }
+                    <button onclick="removeFile('${item.id
+      }')" class="text-gray-400 hover:text-red-500"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
                 </div>
             </div>
 
             <div class="grid grid-cols-2 divide-x divide-border dark:divide-dark-border">
-                
+
                 <!-- Original Column -->
                 <div class="p-4 flex flex-col gap-3">
                     <div class="flex justify-between items-center">
@@ -325,8 +346,8 @@ function renderList() {
                             <span class="text-[10px] font-bold bg-gray-200 dark:bg-dark-border px-1.5 py-0.5 rounded text-secondary dark:text-dark-secondary">${inputFormat}</span>
                         </div>
                         <span class="text-[10px] font-mono bg-gray-100 dark:bg-dark-border px-1.5 py-0.5 rounded">${formatBytes(
-                          item.file.size
-                        )}</span>
+        item.file.size
+      )}</span>
                     </div>
                     <div class="aspect-video bg-gray-100 dark:bg-[#151515] rounded-lg overflow-hidden flex items-center justify-center border border-border dark:border-dark-border relative group">
                         <img src="${originalUrl}" class="max-w-full max-h-full object-contain">
@@ -341,22 +362,17 @@ function renderList() {
                     <div class="flex justify-between items-center">
                         <div class="flex items-center gap-2">
                             <h4 class="text-xs font-bold uppercase tracking-wider text-brand">Résultat</h4>
-                            <select onchange="updateItemFormat('${
-                              item.id
-                            }', this.value)" 
+                            <select onchange="updateItemFormat('${item.id
+      }', this.value)"
                                 class="text-[10px] bg-brand/10 text-brand font-bold border-none rounded py-0.5 pl-1.5 pr-6 cursor-pointer outline-none focus:ring-1 focus:ring-brand">
-                                <option value="image/jpeg" ${
-                                  item.format === "image/jpeg" ? "selected" : ""
-                                }>JPG</option>
-                                <option value="image/png" ${
-                                  item.format === "image/png" ? "selected" : ""
-                                }>PNG</option>
-                                <option value="image/webp" ${
-                                  item.format === "image/webp" ? "selected" : ""
-                                }>WEBP</option>
-                                <option value="image/avif" ${
-                                  item.format === "image/avif" ? "selected" : ""
-                                }>AVIF</option>
+                                <option value="image/jpeg" ${item.format === "image/jpeg" ? "selected" : ""
+      }>JPG</option>
+                                <option value="image/png" ${item.format === "image/png" ? "selected" : ""
+      }>PNG</option>
+                                <option value="image/webp" ${item.format === "image/webp" ? "selected" : ""
+      }>WEBP</option>
+                                <option value="image/avif" ${item.format === "image/avif" ? "selected" : ""
+      }>AVIF</option>
                             </select>
                         </div>
                         <div class="flex gap-2 items-center">
@@ -365,33 +381,29 @@ function renderList() {
                         </div>
                     </div>
                     <div class="aspect-video bg-gray-100 dark:bg-[#151515] rounded-lg overflow-hidden flex items-center justify-center border border-brand/20 dark:border-brand/20 relative group">
-                        <img src="${outputUrl}" class="max-w-full max-h-full object-contain transition-opacity duration-300 ${
-      !isDone ? "opacity-40 grayscale" : ""
-    }">
-                        ${
-                          isProcessingItem
-                            ? `
+                        <img src="${outputUrl}" class="max-w-full max-h-full object-contain transition-opacity duration-300 ${!isDone ? "opacity-40 grayscale" : ""
+      }">
+                        ${isProcessingItem
+        ? `
                         <div class="absolute inset-0 flex items-center justify-center bg-white/50 dark:bg-black/50 backdrop-blur-sm">
                             <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-brand"></div>
                         </div>`
-                            : ""
-                        }
-                        ${
-                          !isDone && !isProcessingItem
-                            ? `
+        : ""
+      }
+                        ${!isDone && !isProcessingItem
+        ? `
                         <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
                             <span class="text-[10px] text-secondary dark:text-dark-secondary bg-white dark:bg-dark-surface px-2 py-1 rounded shadow-sm border border-border dark:border-dark-border">Aperçu auto...</span>
                         </div>`
-                            : ""
-                        }
-                        ${
-                          isDone
-                            ? `
+        : ""
+      }
+                        ${isDone
+        ? `
                         <div class="absolute bottom-1 right-1 bg-brand text-white text-[9px] px-1.5 rounded backdrop-blur-sm shadow-sm">
                             ${outputDimsStr}
                         </div>`
-                            : ""
-                        }
+        : ""
+      }
                     </div>
                 </div>
 
@@ -456,7 +468,7 @@ async function processQueue(isAuto = false) {
           finalH = targetH;
         } else if (targetW) {
           finalW = targetW;
-          finalH = Math.round(srcW * (targetW / srcW));
+          finalH = Math.round(srcH * (targetW / srcW));
         } else if (targetH) {
           finalH = targetH;
           finalW = Math.round(srcW * (targetH / srcH));
